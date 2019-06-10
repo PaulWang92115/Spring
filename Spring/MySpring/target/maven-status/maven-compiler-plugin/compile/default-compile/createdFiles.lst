@@ -1,0 +1,10 @@
+org/springframework/ioc/annotation/Repository.class
+org/springframework/ioc/bean/AnnotationApplicationContext.class
+org/springframework/ioc/annotation/Controller.class
+org/springframework/ioc/annotation/Service.class
+org/springframework/ioc/bean/AnnotationApplicationContext$1.class
+org/springframework/ioc/annotation/Component.class
+org/springframework/ioc/xml/XmlUtil.class
+org/springframework/ioc/annotation/Autowired.class
+org/springframework/ioc/factory/BeanFactory.class
+org/springframework/ioc/bean/ApplicationContext.class
