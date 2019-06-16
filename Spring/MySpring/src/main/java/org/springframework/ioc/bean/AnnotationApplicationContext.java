@@ -21,13 +21,13 @@ import org.springframework.ioc.annotation.Service;
 public class AnnotationApplicationContext extends ApplicationContext {
 	
 	//保存类路径的缓存
-	private static List<String> classCache = Collections.synchronizedList(new ArrayList<String>());
+	private List<String> classCache = Collections.synchronizedList(new ArrayList<String>());
 	
 	//保存需要注入的类的缓存
-	private static List<Class<?>> beanDefinition = Collections.synchronizedList(new ArrayList<Class<?>>());
+	private List<Class<?>> beanDefinition = Collections.synchronizedList(new ArrayList<Class<?>>());
 
 	//保存类实例的容器
-	private static Map<String,Object> beanFactory = new ConcurrentHashMap<>();
+	private Map<String,Object> beanFactory = new ConcurrentHashMap<>();
 	
 	public AnnotationApplicationContext(String configuration) {
 		super(configuration);
