@@ -254,9 +254,10 @@ public class AnnotationApplicationContext extends ApplicationContext {
 
 
 	private String lowerClass(String simpleName) {
-        char[] chars = simpleName.toCharArray();
-        chars[0] += 32;
-        return chars.toString();
+		char[] chars = simpleName.toCharArray();
+		chars[0] += 32;
+		String res = String.valueOf(chars);
+		return res;
 	}
 
 }
