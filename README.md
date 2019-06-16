@@ -1,5 +1,10 @@
 # 手动实现一个 IOC/DI 容器
 
+* MySpring，自己实现的 IOC/DI 框架。
+* PaulMVC，自己实现的 MVC 框架，依赖 MySpring。
+* Demo，IOC/DI 框架的测试项目。
+* WebDemo，MVC 框架和 IOC/DI 框架的 web 测试项目。
+
 项目整体用 maven 构建，里面有两个模块，MySpring 为 IOC/DI 的核心，Demo 为测试项目。
 
 
@@ -419,4 +424,257 @@
     我在读书
    ```
    
-   这样一个  IOC/DI 容器就构建成功了，整个项目源码在，希望大家 mark 一下，一起改进。
+   这样一个  IOC/DI 容器就构建成功了，希望大家 mark 一下，一起改进。
+   
+   下面我们在这个基础上实现一个 MVC 框架。首先 @Controller，@Service，@Repository 注解已经在我们自己的 Spring 框架里面定义了，可以实现将被这些注解标记的类交给 Spring 管理，并且实现了依赖注入。
+
+### 先看整体架构
+
+![](https://user-gold-cdn.xitu.io/2019/6/16/16b5f96f6b0ee5df?w=894&h=854&f=png&s=94379)
+ 因为我们这个 MVC 框架要依赖 IOC/DI 容器，所以我们在 pom 文件里要将自己的 Spring 框架引入进来。
+ 
+![](https://user-gold-cdn.xitu.io/2019/6/16/16b5f982d83c6f93?w=1774&h=494&f=png&s=114809)
+
+### 实现 MVC 的整体功能
+首先我们定义两个 MVC 专用的注解，RequestMapping 用来做 url 匹配，RequestParam 做参数转换：
+```java
+package com.paul.annotation;
+
+import java.lang.annotation.*;
+
+@Target({ElementType.TYPE,ElementType.METHOD})
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface RequestMapping {
+    String value() default "";
+}
+
+```
+```java
+package com.paul.annotation;
+
+import java.lang.annotation.*;
+
+@Target(ElementType.PARAMETER)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface RequestParam {
+    String value() default "";
+}
+
+```
+
+我们知道 SpringMVC 的核心是 DispatcherServlet，用来做核心路由控制，我们也定义这样一个类，并且在初始化方法里初始化一个 IOC/DI 容器，看过前面文章的同学应该知道，初始化容器后我们已经将 Bean 放到容器中而且完成了依赖注入。
+
+```java
+package com.paul.servlet;
+
+import com.paul.annotation.RequestMapping;
+import com.paul.annotation.RequestParam;
+import org.springframework.ioc.annotation.Controller;
+import org.springframework.ioc.bean.AnnotationApplicationContext;
+import org.springframework.ioc.bean.ApplicationContext;
+
+import javax.servlet.ServletConfig;
+import javax.servlet.ServletException;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+//实现 servlet，和我们以前使用 servlet 一样。
+public class DispatcherServlet extends HttpServlet {
+
+    // 完整路径和 方法的 mapping
+    private Map<String,Object> handleMapping = new ConcurrentHashMap<>();
+
+    // 类路径和controller 的 mapping
+    private Map<String,Object> controllerMapping = new ConcurrentHashMap<>();
+    
+    private Map<String,Object> beanFactory = new ConcurrentHashMap<>();
+
+    @Override
+    public void init(ServletConfig config) throws ServletException {
+        super.init(config);
+
+        //实例化 IOC 容器
+        ApplicationContext ctx = new AnnotationApplicationContext("applicationContext.xml");
+        this.beanFactory = ((AnnotationApplicationContext) ctx).beanFactory;
+        //上一步已经完成了 Controller，service，respostry，autowired 等注解的扫描和注入
+        //遍历容器，将 requestmapping 注解的路径和对应的方法以及 contoller 实例对应起来
+
+        for(Map.Entry<String,Object> entry:beanFactory.entrySet()){
+            Object instance = entry.getValue();
+            Class<?> clazz = instance.getClass();
+            if(clazz.isAnnotationPresent(Controller.class)){
+                RequestMapping requestMapping = clazz.getAnnotation(RequestMapping.class);
+                String classPath = requestMapping.value();
+                Method[] methods = clazz.getMethods();
+                for(Method method:methods){
+                    if(method.isAnnotationPresent(RequestMapping.class)){
+                        RequestMapping requestMapping2 = method.getAnnotation(RequestMapping.class);
+                        String methodPath = requestMapping2.value();
+                        String requestPath = classPath + methodPath;
+                        handleMapping.put(requestPath,method);
+                        controllerMapping.put(requestPath,instance);
+                    }else{
+                        continue;
+                    }
+
+                }
+            }else{
+                continue;
+            }
+        }
+    }
+
+
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        this.doPost(req, resp);
+    }
+
+    //根据上一步获取到的 mapping，根据 url 找到对应的 controller 和方法去执行。
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        String uri = req.getRequestURI();   //   /paul-mvc/com.paul.controller/method-com.paul.controller
+        String context = req.getContextPath();  // /paul-vmc
+        String path = uri.replace(context,"");  // /com.paul.controller/method-com.paul.controller
+        Method m = (Method) handleMapping.get(path);
+
+        //从容器里拿到controller 实例
+        Object instance = controllerMapping.get(path);
+
+        Object[] args =  handle(req,resp,m);
+        for (Object a:args){
+            System.out.println("Object:"+a);
+        }
+
+        try {
+            m.invoke(instance,args);
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (InvocationTargetException e) {
+            e.printStackTrace();
+        }
+
+
+    }
+
+
+    private static Object[] handle(HttpServletRequest req, HttpServletResponse resp,Method method){
+        //拿到当前执行的方法有哪些参数
+        Class<?>[] paramClazzs = method.getParameterTypes();
+        //根据参数的个数，new 一个参数的数据
+        Object[] args = new Object[paramClazzs.length];
+
+        int args_i = 0;
+        int index = 0;
+        for(Class<?> paramClazz:paramClazzs){
+            if(ServletRequest.class.isAssignableFrom(paramClazz)){
+                args[args_i++] = req;
+            }
+            if(ServletResponse.class.isAssignableFrom(paramClazz)){
+                args[args_i++] = resp;
+            }
+
+            //判断requestParam  注解
+            Annotation[] paramAns = method.getParameterAnnotations()[index];
+            if(paramAns.length > 0){
+                System.out.println("my");
+                for(Annotation paramAn:paramAns){
+                    if(RequestParam.class.isAssignableFrom(paramAn.getClass())){
+                        System.out.println("13mj");
+                        RequestParam rp = (RequestParam) paramAn;
+                        args[args_i++] = req.getParameter(rp.value());
+                    }
+                }
+            }
+            index ++;
+        }
+        return  args;
+    }
+
+}
+
+```
+
+### 测试代码
+新建一个 WebDemo，Maven web 项目。
+
+先来看我们需要测试的 Controller 和 Service。
+```java
+@Controller
+@RequestMapping("/user")
+public class UserController {
+
+    @Autowired
+    private UserService userService;
+
+    @RequestMapping("/query")
+    public void get(HttpServletRequest request, HttpServletResponse response, @RequestParam("name") String name,@RequestParam("age") String age){
+        try {
+            PrintWriter pw = response.getWriter();
+            String res = userService.query(name,age);
+            pw.write(res);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+}
+```
+
+```java
+import org.springframework.ioc.annotation.Service;
+
+@Service("userService")
+public class UserServiceImpl implements UserService {
+    @Override
+    public String query(String name, String age) {
+        return "name="+name+"age="+age;
+    }
+}
+```
+
+在 resources 目录我们需要写一个名字为 applicationContext 的配置文件来指明扫描包路径。
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans>
+    <package-scan component-scan="com.paul.demo" />
+</beans>
+```
+在 web.xml 中配置我们自己的 DispatcherServlet。
+```java
+<!DOCTYPE web-app PUBLIC
+        "-//Sun Microsystems, Inc.//DTD Web Application 2.3//EN"
+        "http://java.sun.com/dtd/web-app_2_3.dtd" >
+
+<web-app>
+  <display-name>Archetype Created Web Application</display-name>
+  <servlet>
+    <servlet-name>DispatcherServlet</servlet-name>
+    <servlet-class>com.paul.servlet.DispatcherServlet</servlet-class>
+    <load-on-startup>0</load-on-startup>
+  </servlet>
+
+  <servlet-mapping>
+    <servlet-name>DispatcherServlet</servlet-name>
+    <url-pattern>/</url-pattern>
+  </servlet-mapping>
+</web-app>
+
+```
+
+在浏览器中测试结果：
+
+![](https://user-gold-cdn.xitu.io/2019/6/16/16b5fa4cfacd8bf8?w=1334&h=212&f=png&s=32254)
+
+结果和我们想的一样。
