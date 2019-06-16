@@ -27,7 +27,7 @@ public class AnnotationApplicationContext extends ApplicationContext {
 	private List<Class<?>> beanDefinition = Collections.synchronizedList(new ArrayList<Class<?>>());
 
 	//保存类实例的容器
-	private Map<String,Object> beanFactory = new ConcurrentHashMap<>();
+	public Map<String,Object> beanFactory = new ConcurrentHashMap<>();
 	
 	public AnnotationApplicationContext(String configuration) {
 		super(configuration);
@@ -56,7 +56,9 @@ public class AnnotationApplicationContext extends ApplicationContext {
 	 * 
 	 */
 	private void scanPackage(final String path) {
+		System.out.println("path:"+path);
 		URL url = this.getClass().getClassLoader().getResource(path.replaceAll("\\.", "/"));
+		System.out.println(url.getPath());
 		try {
 			File file = new File(url.toURI());
 			
@@ -98,7 +100,7 @@ public class AnnotationApplicationContext extends ApplicationContext {
 			try {
 				//使用反射，通过类路径获取class 对象
 				Class<?> clazz = Class.forName(path);
-				//找出需要被容器管理的类，比如，@Component，@Controller，@Service，@Repository
+				//找出需要被容器管理的类，比如，@Component，@com.paul.demo.Controller，@com.paul.demo.Service，@Repository
 				if(clazz.isAnnotationPresent(Repository.class)||clazz.isAnnotationPresent(Service.class)
 						||clazz.isAnnotationPresent(Controller.class)|| clazz.isAnnotationPresent(Component.class)){
 					beanDefinition.add(clazz);
@@ -259,6 +261,7 @@ public class AnnotationApplicationContext extends ApplicationContext {
 		String res = String.valueOf(chars);
 		return res;
 	}
+
 
 }
 
